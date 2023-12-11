@@ -21,7 +21,7 @@ func getHeaderWithCookie(cookieFilePath string) (http.Header, error) {
 		return nil, fmt.Errorf("can't read file: %w", err)
 	}
 
-	header.Set("Cookie", string(contents))
+	header.Set("Cookie", strings.TrimSpace(string(contents)))
 	return header, nil
 }
 
