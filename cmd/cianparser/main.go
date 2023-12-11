@@ -92,7 +92,7 @@ func main() {
 		},
 	}
 
-	parser := cian.NewParser(httpClient, string(geojson), searchType, searchFilters, 10000, 2, 10)
+	parser := cian.NewParser(httpClient, string(geojson), searchType, searchFilters, 10000, 1, 10)
 
 	offerIDs, err := parser.GetOfferIDs()
 	if err != nil {
