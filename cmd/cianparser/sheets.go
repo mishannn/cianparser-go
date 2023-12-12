@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"golang.org/x/oauth2/google"
@@ -11,15 +10,10 @@ import (
 	"google.golang.org/api/sheets/v4"
 )
 
-func saveFlatStatistic(credentialsFilePath string, spreadsheetId string, dataRange string, t time.Time, data []flatStatItem) error {
+func saveFlatStatistic(credentialsFileContents []byte, spreadsheetId string, dataRange string, t time.Time, data []flatStatItem) error {
 	ctx := context.Background()
 
-	b, err := os.ReadFile(credentialsFilePath)
-	if err != nil {
-		return fmt.Errorf("can't read credentials file: %w", err)
-	}
-
-	config, err := google.JWTConfigFromJSON(b, "https://www.googleapis.com/auth/spreadsheets")
+	config, err := google.JWTConfigFromJSON(credentialsFileContents, "https://www.googleapis.com/auth/spreadsheets")
 	if err != nil {
 		return fmt.Errorf("can't read JWT config from json: %w", err)
 	}

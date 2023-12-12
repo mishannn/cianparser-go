@@ -2,28 +2,15 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/mishannn/cianparser-go/internal/cian"
-	"github.com/mishannn/cianparser-go/internal/httpclient"
 )
-
-func getHeaderWithCookie(cookieFilePath string) (http.Header, error) {
-	header := make(http.Header)
-
-	contents, err := os.ReadFile(cookieFilePath)
-	if err != nil {
-		return nil, fmt.Errorf("can't read file: %w", err)
-	}
-
-	header.Set("Cookie", strings.TrimSpace(string(contents)))
-	return header, nil
-}
 
 func getDistrictString(addresses []cian.Address) string {
 	parts := make([]string, 0)
@@ -38,33 +25,45 @@ func getDistrictString(addresses []cian.Address) string {
 }
 
 func main() {
-	polygonFilePath := flag.String("polygon", "polygon.geojson", "polygon for search")
-	cookieFilePath := flag.String("cookie", "", "cookie file")
-	credentialsFilePath := flag.String("credentials", "credentials.json", "google credentials file")
+	polygonFilePath := flag.String("polygon", "", "polygon for search")
+	credentialsFilePath := flag.String("credentials", "", "google credentials file")
 	spredsheetId := flag.String("spreadsheet", "", "sheet id")
-	dataRange := flag.String("datarange", "A:E", "sheets data range")
+	dataRange := flag.String("datarange", "", "sheets data range")
+	rucaptchaKey := flag.String("rucaptchakey", "", "rucapctha key")
 	flag.Parse()
 
-	var err error
+	if *spredsheetId == "" {
+		log.Fatalf("spreadsheet flag not set")
+	}
 
-	var header http.Header
-	if *cookieFilePath != "" {
-		header, err = getHeaderWithCookie(*cookieFilePath)
-		if err != nil {
-			log.Fatalf("can't read cookie: %s", err)
-		}
-	} else {
-		header = make(http.Header)
+	if *dataRange == "" {
+		log.Fatalf("datarange flag not set")
+	}
+
+	if *rucaptchaKey == "" {
+		log.Fatalf("rucaptchakey flag not set")
+	}
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		log.Fatalf("can't create cookie jar: %s", err)
+	}
+
+	credentials, err := os.ReadFile(*credentialsFilePath)
+	if err != nil {
+		log.Fatalf("can't read credentials file: %s", err)
 	}
 
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 	}
+
 	httpClient := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
-		Transport: httpclient.NewRoundTripperWithHeaders(transport, header),
+		Jar:       jar,
+		Transport: transport,
 	}
 
 	geojson, err := os.ReadFile(*polygonFilePath)
@@ -92,7 +91,7 @@ func main() {
 		},
 	}
 
-	parser := cian.NewParser(httpClient, string(geojson), searchType, searchFilters, 10000, 1, 10)
+	parser := cian.NewParser(httpClient, *rucaptchaKey, string(geojson), searchType, searchFilters, 10000, 1, 6)
 
 	offerIDs, err := parser.GetOfferIDs()
 	if err != nil {
@@ -106,7 +105,7 @@ func main() {
 
 	flatStat := getFlatStatistic(offers)
 
-	err = saveFlatStatistic(*credentialsFilePath, *spredsheetId, *dataRange, time.Now(), flatStat)
+	err = saveFlatStatistic(credentials, *spredsheetId, *dataRange, time.Now(), flatStat)
 	if err != nil {
 		log.Fatalf("can't save statistic: %s", err)
 	}

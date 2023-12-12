@@ -3,9 +3,11 @@ module github.com/mishannn/cianparser-go
 go 1.21.5
 
 require (
+	github.com/2captcha/2captcha-go v1.1.4
 	github.com/paulmach/orb v0.10.0
 	github.com/twpayne/go-geos v0.14.0
 	golang.org/x/oauth2 v0.15.0
+	golang.org/x/sync v0.5.0
 	gonum.org/v1/gonum v0.14.0
 	google.golang.org/api v0.153.0
 )
