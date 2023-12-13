@@ -84,7 +84,7 @@ func saveStatistic(db *sql.DB, timestamp time.Time, statistic []flatStatItem) er
 	}
 
 	for _, row := range statistic {
-		_, err := batch.Exec(timestamp, row.Location, row.Category, row.RoomsCount, row.MedianPrice)
+		_, err := batch.Exec(timestamp.UTC(), row.Location, row.Category, row.RoomsCount, row.MedianPrice)
 		if err != nil {
 			return fmt.Errorf("can't write statistic row: %w", err)
 		}
