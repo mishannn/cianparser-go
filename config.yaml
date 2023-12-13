@@ -1,0 +1,24 @@
+cian:
+  search_type: flatsale
+  search_query:
+    demolished_in_moscow_programm:
+      type: term
+      value: false
+    only_flat:
+      type: term
+      value: true
+    flat_share:
+      type: term
+      value: 2
+  max_cell_size_meters: 10000
+  max_workers_collect_ids: 1
+  max_workers_collect_offers: 10
+
+rucaptcha:
+  api_key: ...
+
+database:
+  address: ...
+  database: ...
+  username: ...
+  password: ...

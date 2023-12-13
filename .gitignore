@@ -20,6 +20,5 @@
 # Go workspace file
 go.work
 
-# Sensetive data
-credentials.json
-cookie.txt
+# Local files
+*-local.*

@@ -1,97 +1,92 @@
 package main
 
 import (
+	"database/sql"
+	"embed"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
-	"strings"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/mishannn/cianparser-go/internal/cian"
+	"github.com/pressly/goose/v3"
 )
 
-func getDistrictString(addresses []cian.Address) string {
-	parts := make([]string, 0)
+//go:embed migrations/*.sql
+var embedMigrations embed.FS
 
-	for _, address := range addresses {
-		if address.GeoType == "location" || address.GeoType == "district" {
-			parts = append(parts, address.FullName)
-		}
+func upMigrations(db *sql.DB) error {
+	goose.SetBaseFS(embedMigrations)
+
+	if err := goose.SetDialect("clickhouse"); err != nil {
+		return fmt.Errorf("can't set dialect for migrations: %w", err)
 	}
 
-	return strings.Join(parts, ", ")
+	if err := goose.Up(db, "migrations"); err != nil {
+		return fmt.Errorf("can't up migrations: %w", err)
+	}
+
+	return nil
 }
 
-func main() {
-	polygonFilePath := flag.String("polygon", "", "polygon for search")
-	credentialsFilePath := flag.String("credentials", "", "google credentials file")
-	spredsheetId := flag.String("spreadsheet", "", "sheet id")
-	dataRange := flag.String("datarange", "", "sheets data range")
-	rucaptchaKey := flag.String("rucaptchakey", "", "rucapctha key")
-	flag.Parse()
-
-	if *spredsheetId == "" {
-		log.Fatalf("spreadsheet flag not set")
-	}
-
-	if *dataRange == "" {
-		log.Fatalf("datarange flag not set")
-	}
-
-	if *rucaptchaKey == "" {
-		log.Fatalf("rucaptchakey flag not set")
-	}
-
+func newHttpClient() *http.Client {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		log.Fatalf("can't create cookie jar: %s", err)
-	}
-
-	credentials, err := os.ReadFile(*credentialsFilePath)
-	if err != nil {
-		log.Fatalf("can't read credentials file: %s", err)
 	}
 
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 	}
 
-	httpClient := &http.Client{
+	return &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 		Jar:       jar,
 		Transport: transport,
 	}
+}
 
-	geojson, err := os.ReadFile(*polygonFilePath)
+func main() {
+	var configFilePath string
+	flag.StringVar(&configFilePath, "c", "config.yaml", "config file path")
+
+	var geojsonFilePath string
+	flag.StringVar(&geojsonFilePath, "f", "polygon.geojson", "geojson file path")
+
+	flag.Parse()
+
+	cfg, err := newConfig(configFilePath)
+	if err != nil {
+		log.Fatalf("can't read config: %s", err)
+	}
+
+	db := clickhouse.OpenDB(&clickhouse.Options{
+		Addr: []string{cfg.Database.Address},
+		Auth: clickhouse.Auth{
+			Database: cfg.Database.Database,
+			Username: cfg.Database.Username,
+			Password: cfg.Database.Password,
+		},
+	})
+	err = upMigrations(db)
+	if err != nil {
+		log.Fatalf("can't up migrations: %s", err)
+	}
+
+	httpClient := newHttpClient()
+
+	geojson, err := os.ReadFile(geojsonFilePath)
 	if err != nil {
 		log.Fatalf("can't read polygon file: %s", err)
 	}
 
-	searchType := "flatsale"
-	searchFilters := map[string]cian.JSONQueryItem{
-		"engine_version": {
-			Type:  "term",
-			Value: 2,
-		},
-		"demolished_in_moscow_programm": {
-			Type:  "term",
-			Value: false,
-		},
-		"only_flat": {
-			Type:  "term",
-			Value: true,
-		},
-		"flat_share": {
-			Type:  "term",
-			Value: 2,
-		},
-	}
-
-	parser := cian.NewParser(httpClient, *rucaptchaKey, string(geojson), searchType, searchFilters, 10000, 1, 6)
+	parser := cian.NewParser(httpClient, cfg.Rucaptcha.APIKey, string(geojson), cfg.Cian.SearchType, cfg.Cian.SearchQuery, cfg.Cian.MaxCellSizeMeters, cfg.Cian.MaxWorkersCollectIds, cfg.Cian.MaxWorkersCollectOffers)
 
 	offerIDs, err := parser.GetOfferIDs()
 	if err != nil {
@@ -105,8 +100,10 @@ func main() {
 
 	flatStat := getFlatStatistic(offers)
 
-	err = saveFlatStatistic(credentials, *spredsheetId, *dataRange, time.Now(), flatStat)
+	err = saveStatistic(db, time.Now(), flatStat)
 	if err != nil {
 		log.Fatalf("can't save statistic: %s", err)
 	}
+
+	log.Println("statistic collected and saved")
 }
