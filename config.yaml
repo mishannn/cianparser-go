@@ -12,7 +12,7 @@ cian:
       value: 2
   max_cell_size_meters: 10000
   max_workers_collect_ids: 1
-  max_workers_collect_offers: 10
+  max_workers_collect_offers: 4
 
 rucaptcha:
   api_key: ...
